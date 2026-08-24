@@ -1,18 +1,59 @@
 # VaultPipe
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](#installation)
+[![CI](https://github.com/ThejasRajamoney/Vaultpipe/actions/workflows/ci.yml/badge.svg)](https://github.com/ThejasRajamoney/Vaultpipe/actions/workflows/ci.yml)
+
 VaultPipe is a command-line tool for authenticated, encrypted file transfer over a direct TCP
 connection. It streams one file at a time without uploading it to a relay or cloud service.
 
-## Highlights
+## Why VaultPipe?
 
-- AES-256-GCM authenticated encryption with independent keys in each direction
-- Password-authenticated ephemeral sessions or mutually pinned RSA identities
-- RSA-OAEP-SHA256 session-key transport and RSA-PSS identity proofs
-- Bounded 64 KiB chunks with optional bounded zlib compression
-- Resume validation using the SHA-256 hash of the existing partial-file prefix
-- Strict packet, metadata, filename, decompression, and total-size limits
-- Atomic final-file installation and explicit overwrite behavior
-- Linux and Windows CI across supported Python versions
+- **Direct transfer:** Files move directly between sender and receiver without intermediate
+  storage, a relay service, or a cloud upload.
+- **Authenticated encryption:** Password proofs or mutually pinned identity keys authenticate
+  the session before file data is transferred.
+- **Streaming design:** Files are processed in bounded 64 KiB chunks, keeping memory use stable
+  for large transfers.
+- **Recoverable transfers:** Interrupted downloads retain authenticated chunks and can resume
+  only after the existing prefix is verified against the source.
+
+## How It Works
+
+The sender listens for one receiver, both peers authenticate a versioned handshake, and the
+file travels through a directional AES-256-GCM session over direct TCP.
+
+```text
+[Sender] -- authenticated handshake --> [Receiver]
+[Sender] ===== AES-256-GCM / TCP =====> [Receiver]
+```
+
+## Features
+
+- **Direct peer-to-peer transfer:** No VaultPipe server, relay, account, or cloud storage.
+- **AES-256-GCM encryption:** Independent directional keys provide confidentiality and
+  per-record tamper detection.
+- **RSA identity and key exchange:** RSA-OAEP-SHA256 protects session material, while RSA-PSS
+  proves ownership of mutually pinned identity keys.
+- **Password authentication:** Ephemeral sessions support PBKDF2-HMAC-SHA256 with 600,000
+  iterations and transcript-bound proofs.
+- **SHA-256 integrity verification:** The receiver verifies the complete file before installing
+  it and acknowledges the verified digest to the sender.
+- **Validated resume:** A partial transfer resumes only when its byte offset and SHA-256 prefix
+  match the sender's source file.
+- **Chunked compression:** Optional bounded zlib compression is applied independently to each
+  64 KiB plaintext chunk before encryption.
+- **Safe output handling:** Portable filename validation, bounded packet sizes, bounded
+  decompression, atomic installation, and explicit overwrite behavior.
+- **Identity tools:** Generate protected persistent RSA keypairs and inspect public-key
+  fingerprints from the CLI.
+- **Terminal UI:** Rich progress bars show transfer progress, speed, remaining time, and final
+  integrity status.
+- **Cross-platform support:** Runs on Windows, Linux, and macOS with Python 3.10 or newer;
+  Windows and Linux are exercised in CI.
+- **Multiple entry points:** Use the installed `vaultpipe` command, `python -m vaultpipe`, or the
+  original `python vaultpipe/vaultpipe.py` script path.
 
 ## Installation
 
@@ -120,6 +161,16 @@ python -m pytest
 The test suite covers packet limits, malformed metadata, output-path confinement,
 authenticated records, compression bounds, password mismatch, pinned identities, encrypted
 round trips, corrupted partial files, and interrupted resume.
+
+## Contributing
+
+Bug reports and pull requests are welcome.
+
+1. Fork the repository.
+2. Create a focused feature branch.
+3. Add or update tests for behavioral changes.
+4. Run the formatting, lint, and test commands above.
+5. Open a pull request describing the change and verification performed.
 
 ## License
 
