@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vaultpipe"
+version = "2.0.0"
+description = "Authenticated, encrypted peer-to-peer file transfer over direct TCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "ThejasRajamoney" }]
+keywords = ["file-transfer", "encryption", "peer-to-peer", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Communications :: File Sharing",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "click>=8.1,<9",
+    "cryptography>=42,<51",
+    "rich>=13.7,<16",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "pytest-timeout>=2.3,<3",
+    "ruff>=0.8,<1",
+]
+
+[project.scripts]
+vaultpipe = "vaultpipe.vaultpipe:cli"
+
+[project.urls]
+Repository = "https://github.com/ThejasRajamoney/Vaultpipe"
+Issues = "https://github.com/ThejasRajamoney/Vaultpipe/issues"
+
+[tool.setuptools]
+packages = ["vaultpipe"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+timeout = 20
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RUF"]
