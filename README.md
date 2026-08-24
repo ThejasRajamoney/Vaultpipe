@@ -1,89 +1,126 @@
-# 🔒 VaultPipe
+# VaultPipe
 
-Secure, peer-to-peer file transfer tool designed for direct, encrypted communication between machines.
+VaultPipe is a command-line tool for authenticated, encrypted file transfer over a direct TCP
+connection. It streams one file at a time without uploading it to a relay or cloud service.
 
-![Python Version](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)
+## Highlights
 
-## Why VaultPipe?
-
-- **Direct & Private**: Files move directly between peers without intermediate servers, cloud storage, or third-party tracking.
-- **Zero-Knowledge Architecture**: Everything is encrypted end-to-end; your data remains your data, invisible to anyone but the intended recipient.
-- **High Performance**: Built with chunked AES-256-GCM encryption and optional compression for fast, secure, and resource-efficient transfers.
-
-## How it works
-
-The connection is established directly between the sender and receiver. No servers. No cloud. Just you and them.
-
-```text
-[Sender]──AES-256-GCM──▶ [Direct TCP] ──▶ [Receiver]
-```
+- AES-256-GCM authenticated encryption with independent keys in each direction
+- Password-authenticated ephemeral sessions or mutually pinned RSA identities
+- RSA-OAEP-SHA256 session-key transport and RSA-PSS identity proofs
+- Bounded 64 KiB chunks with optional bounded zlib compression
+- Resume validation using the SHA-256 hash of the existing partial-file prefix
+- Strict packet, metadata, filename, decompression, and total-size limits
+- Atomic final-file installation and explicit overwrite behavior
+- Linux and Windows CI across supported Python versions
 
 ## Installation
 
-Get up and running in seconds by installing the required dependencies:
+VaultPipe requires Python 3.10 or newer.
 
 ```bash
-pip install cryptography rich click
+git clone https://github.com/ThejasRajamoney/Vaultpipe.git
+cd Vaultpipe
+python -m pip install -e .
+vaultpipe --help
 ```
 
-## Usage
+The original script entry point remains available as `python vaultpipe/vaultpipe.py`.
 
-VaultPipe provides a clean CLI interface for managing your secure transfers.
+## Password Mode
 
-### 1. Send a File
-Start a listening server to send a file. You can optionally add a password for extra security.
+Create a password file through a secure local method and give the same file to both peers.
+VaultPipe removes one trailing line ending when reading it.
+
+Start the sender:
+
 ```bash
-python vaultpipe.py send backup.zip --password "super-secret-pass" --compress
+vaultpipe send backup.zip --password-file transfer-password.txt --compress
 ```
 
-### 2. Receive a File
-Connect to a sender to retrieve a file. Use the `--resume` flag to continue an interrupted transfer.
+Connect from the receiver:
+
 ```bash
-python vaultpipe.py receive ./downloads --host 192.168.1.15 --password "super-secret-pass" --resume
+vaultpipe receive ./downloads \
+  --host 192.168.1.15 \
+  --password-file transfer-password.txt \
+  --resume
 ```
 
-### 3. Generate Keys
-Generate a persistent RSA-2048 keypair for verifying identity across multiple transfers.
+`--password` and the `VAULTPIPE_PASSWORD` environment variable are also supported, but a
+command-line password may be exposed through shell history or process inspection.
+
+## Pinned-Key Mode
+
+Generate one identity on each peer. Private keys are encrypted by default.
+
 ```bash
-python vaultpipe.py keygen --out ./keys --bits 2048
+vaultpipe keygen --out ./sender-identity
+vaultpipe keygen --out ./receiver-identity
 ```
 
-### 4. Check Fingerprint
-Verify the authenticity of a public key by checking its cryptographic fingerprint.
+Exchange the two public keys through a trusted channel and compare their fingerprints:
+
 ```bash
-python vaultpipe.py fingerprint ./keys/vaultpipe_public.pem
+vaultpipe fingerprint ./receiver-identity/vaultpipe_public.pem
 ```
 
-## Security
+Each peer supplies its private key and the other peer's public key. Put the private-key
+passphrase in a local file when running a non-interactive transfer.
 
-VaultPipe is built on industry-standard cryptographic primitives to ensure your data is safe:
+```bash
+vaultpipe send backup.zip \
+  --identity ./sender-identity/vaultpipe_private.pem \
+  --identity-password-file ./sender-passphrase.txt \
+  --peer-key ./receiver-identity/vaultpipe_public.pem
 
-- **RSA-2048**: Used for secure ephemeral or persistent key exchange to establish the encrypted tunnel.
-- **AES-256-GCM**: Provides high-performance authenticated encryption for all file data, ensuring both secrecy and tamper-proof integrity.
-- **PBKDF2**: When a password is used, it is hardened with 100,000 iterations to protect against brute-force attacks.
+vaultpipe receive ./downloads --host 192.168.1.15 \
+  --identity ./receiver-identity/vaultpipe_private.pem \
+  --identity-password-file ./receiver-passphrase.txt \
+  --peer-key ./sender-identity/vaultpipe_public.pem
+```
 
-## Features
+Unauthenticated transfers are rejected by default. `--insecure` is available for controlled
+testing, but it is vulnerable to man-in-the-middle attacks and must be selected by both peers.
 
-- ✔ RSA-2048 Asymmetric Key Exchange
-- ✔ AES-256-GCM Session Encryption
-- ✔ SHA-256 Integrity Verification
-- ✔ Optional Password Authentication (PBKDF2)
-- ✔ Automatic Resume for Interrupted Transfers
-- ✔ Built-in Chunked Compression (zlib)
-- ✔ Beautiful Terminal UI with Progress Bars
+## Resume And Overwrite
 
-## Contributing
+`--resume` uses an application-owned partial file in the output directory. The receiver sends
+the partial length and prefix hash; the sender resumes only when that prefix matches the source.
+An interrupted transfer keeps authenticated chunks for a later attempt.
 
-Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request on GitHub.
+VaultPipe refuses to replace an existing destination unless the receiver passes `--overwrite`.
+The final name is installed only after size and SHA-256 verification.
 
-1. Fork the repository.
-2. Create your feature branch (`git checkout -b feature/amazing-feature`).
-3. Commit your changes (`git commit -m 'Add amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing-feature`).
-5. Open a Pull Request.
+If an acknowledgement is lost after installation, retrying the transfer verifies the existing
+file and sends a new acknowledgement without replacing it. The output directory should not be
+writable by untrusted local users.
+
+## Security Notes
+
+- Shared-password proofs can be tested offline by an attacker who captures a handshake. Use a
+  high-entropy password exchanged over a separate secure channel.
+- Pinned-key mode depends on checking public-key fingerprints out of band.
+- Direct TCP does not hide peer IP addresses, timing, or transfer size.
+- Persistent RSA identities do not provide a forward-secrecy guarantee.
+- This project has not received an independent security audit. Do not treat it as a substitute
+  for an audited transfer protocol in high-risk environments.
+
+See [the protocol specification](docs/protocol.md) for message flow, limits, and threat scope.
+
+## Development
+
+```bash
+python -m pip install -e ".[dev]"
+ruff format --check .
+ruff check .
+python -m pytest
+```
+
+The test suite covers packet limits, malformed metadata, output-path confinement,
+authenticated records, compression bounds, password mismatch, pinned identities, encrypted
+round trips, corrupted partial files, and interrupted resume.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT
